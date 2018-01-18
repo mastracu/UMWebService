@@ -11,7 +11,7 @@ open System.Runtime.Serialization
 
 //http://putridparrot.com/blog/getting-restful-with-suave/
 //https://suave.io/restful.html
-//https://www.youtube.com/watch?v=AMjcjXIMzmA&index=4&list=PLEoMzSkcN8oNiJ67Hd7oRGgD1d4YBxYGC
+    //https://www.youtube.com/watch?v=AMjcjXIMzmA&index=4&list=PLEoMzSkcN8oNiJ67Hd7oRGgD1d4YBxYGC
 
 //TODO: Enhance LocationAgent (MailboxProcessor) to support notification of new events (see Petricek http://tomasp.net/blog/agent-event-reporting.aspx/)
 //TODO: FUTURE: server-side web-socket support to push real-time region updates to connected mobile device app (https://suave.io/websockets.html) - https://blog.xamarin.com/developing-real-time-communication-apps-with-websocket/
@@ -40,6 +40,13 @@ let sleep milliseconds message: WebPart =
       do! Async.Sleep milliseconds
       return! OK message x
     }
+
+let parseAlert (str:String) =
+   let prefix = "channel1.data.raw%20-%3E%20"
+   let suffix = "%0D"
+   let index1 = str.LastIndexOf prefix + String.length prefix
+   let index2 = str.LastIndexOf suffix
+   str.Substring (index1, index2 - index1 )
     
 let regionEventProcessor func:WebPart = 
    mapJson (fun (regEvent:RegionEvent) -> 
@@ -99,8 +106,9 @@ type LocationAgent() =
 [<EntryPoint>]
 let main argv = 
   let cts = new CancellationTokenSource()
-  let conf = { defaultConfig with bindings = [ HttpBinding.create HTTP IPAddress.Any 8082us ] 
+  let conf = { defaultConfig with bindings = [ HttpBinding.create HTTP IPAddress.Any (uint16 argv.[0]) ] 
                                              cancellationToken = cts.Token }
+  // 8082us
 
   let locationAgent = new LocationAgent()
   let mutable key = 'X'
@@ -112,7 +120,9 @@ let main argv =
               path "/goodbye" >=> OK "Good bye GET"  ]
           POST >=> choose
             [ path "/hello" >=> OK "Hello POST"
-              path "/regionEvent" >=> regionEventProcessor locationAgent.UpdateWith  ] ]
+              path "/zd620Alert" >=> request (fun r -> do printf "Scanned Barcode: %s\n" (parseAlert (System.Text.Encoding.ASCII.GetString r.rawForm))
+                                                       OK ("REPLY"))
+              path "/regionEvent" >=> regionEventProcessor locationAgent.UpdateWith  ]  ]
   let listening, server = startWebServerAsync conf app
  
   Async.Start(server, cts.Token)
